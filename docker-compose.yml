@@ -1,0 +1,42 @@
+version: '3.8'
+
+volumes:
+  db_volume:
+  mysqldata:
+    driver: local
+
+services:
+  nginx:
+    container_name: nginx
+    image: nginx:latest
+    ports:
+      - 80:80
+    volumes:
+      - ./:/var/www/
+      - ./.docker/nginx/conf.d:/etc/nginx/conf.d
+    networks:
+      - main
+  php:
+    container_name: php
+    build:
+      context: .docker/php
+    volumes:
+      - ./:/var/www/
+    networks:
+      - main
+  postgres:
+    container_name: postgresql
+    image: postgres:latest
+    volumes:
+      - db_volume:/var/lib/postgresql
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_DB: symfony
+      POSTGRES_USER: symfony
+      POSTGRES_PASSWORD: symfony
+    networks:
+      - main
+
+networks:
+  main:

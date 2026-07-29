@@ -1,6 +1,8 @@
 <?php
 namespace App\Controller;
 
+use App\Entity\Post;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -41,5 +43,22 @@ class PostController extends AbstractController
             return $this->render('post.html.twig', ['id' => 1]);
         }
         throw $this->createNotFoundException('Post not found');
+    }
+
+    #[Route('/posts', methods: 'POST')]
+    public function create(EntityManagerInterface $entityManager): Response
+    {
+        $post = new Post();
+        $post->setTitle('title1');
+        $post->setContent('COntent1');
+        $post->setPreview('1.png');
+        $post->setStatus('1');
+        $post->setCreatedAt(new \DateTimeImmutable());
+        $post->setUpdatedAt(new \DateTimeImmutable());
+
+        $entityManager->persist($post);
+        $entityManager->flush();
+
+        return new Response('ddddd');
     }
 }

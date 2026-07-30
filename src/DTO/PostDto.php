@@ -1,12 +1,13 @@
 <?php
 namespace App\DTO;
 
-use Symfony\Component\Validator\Constraints as Assert;
-
 class PostDto
 {
     public function __construct(
-        public ?string $id
+        public string $title,
+        public ?string $content,
+        public ?string $preview,
+        public ?int $status = 1
     ) {
     }
 }

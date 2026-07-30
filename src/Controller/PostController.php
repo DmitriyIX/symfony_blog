@@ -8,57 +8,78 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\HttpKernel\Attribute\MapQueryParameter;
+use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
 use Symfony\Component\HttpKernel\Attribute\MapQueryString;
 use App\DTO\PostDto;
+use App\DTO\ResponseDto;
 
 class PostController extends AbstractController
 {
-    #[Route('/test')]
-    public function test(
-        #[MapQueryParameter(filter: \FILTER_VALIDATE_REGEXP, options: ['regexp' => '/^\d+$/'])] string $t = '345'
+    #[Route('/posts/{id}', methods: 'PATCH')]
+    public function update(
+        #[MapRequestPayload()] PostDto $postDto,
+        Post $post,
+        int $id,
+        EntityManagerInterface $entityManager
     ): Response
     {
-
-        return new Response("<div>test</div><div>Param: " . $t . "</div>");
+        $result = $entityManager->getRepository(Post::class)->updatePost($id, $postDto);
+        if ($result) {
+            $response = new ResponseDto(true, 'Обновление поста', $postDto, null);
+            return $this->json($response->getResponse(), 200);
+        }
+        return $this->json($post);
     }
 
     #[Route('/posts', methods: 'GET')]
     public function list(
-        #[MapQueryString(mapWhenEmpty: true)] PostDto $postDto,
-        Request $request
+        EntityManagerInterface $entityManager
     ): JsonResponse
     {
-        dd($request->getPreferredLanguage(['ru', 'fr']));
-        dd($postDto);
-        return new JsonResponse(['data' => ['id' => $postDto->id]]);
+        $posts = $entityManager->getRepository(Post::class)->findAllActive();
+        $response = new ResponseDto(true, 'Список постов', $posts, null);
+        return $this->json($response->getResponse(), 200);
     }
 
     #[Route('/posts/{id}', methods: 'GET')]
     public function show(
-        int $id
-    ): Response
+        Post $post
+    ): JsonResponse
     {
-        if ($id == 1) {
-            return $this->render('post.html.twig', ['id' => 1]);
-        }
-        throw $this->createNotFoundException('Post not found');
+        $response = new ResponseDto(true, 'Получение поста', $post, null);
+        return $this->json($response->getResponse(), 200);
     }
 
     #[Route('/posts', methods: 'POST')]
-    public function create(EntityManagerInterface $entityManager): Response
+    public function create(
+        #[MapRequestPayload()] PostDto $postDto,
+        EntityManagerInterface $entityManager
+    ): JsonResponse
     {
         $post = new Post();
-        $post->setTitle('title1');
-        $post->setContent('COntent1');
-        $post->setPreview('1.png');
-        $post->setStatus('1');
+        $post->setTitle($postDto->title);
+        $post->setContent($postDto->content);
+        $post->setPreview($postDto->preview);
+        $post->setStatus($postDto->status);
         $post->setCreatedAt(new \DateTimeImmutable());
         $post->setUpdatedAt(new \DateTimeImmutable());
 
         $entityManager->persist($post);
         $entityManager->flush();
 
-        return new Response('ddddd');
+        $response = new ResponseDto(true, 'Пост создан', ['id' => $post->getId()], null);
+        return $this->json($response->getResponse(), 201);
+    }
+
+    #[Route('/posts/{id}', methods: 'DELETE')]
+    public function remove(
+        Post $post,
+        EntityManagerInterface $entityManager
+    ): JsonResponse
+    {
+        $entityManager->remove($post);
+        $entityManager->flush();
+        $response = new ResponseDto(true, 'Пост удален', null, null);
+        return $this->json($response->getResponse(), Response::HTTP_NO_CONTENT);
     }
 }

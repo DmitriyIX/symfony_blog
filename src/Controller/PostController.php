@@ -2,8 +2,10 @@
 namespace App\Controller;
 
 use App\Entity\Post;
+use App\Event\CustomEvent;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -12,9 +14,16 @@ use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
 use Symfony\Component\HttpKernel\Attribute\MapQueryString;
 use App\DTO\PostDto;
 use App\DTO\ResponseDto;
+use Symfony\Contracts\EventDispatcher\Event;
+use Psr\Log\LoggerInterface;
 
 class PostController extends AbstractController
 {
+    public function __construct(
+        private EventDispatcherInterface $dispatcher,
+        private LoggerInterface $logger
+    ){}
+
     #[Route('/posts/{id}', methods: 'PATCH')]
     public function update(
         #[MapRequestPayload()] PostDto $postDto,
@@ -46,6 +55,12 @@ class PostController extends AbstractController
         Post $post
     ): JsonResponse
     {
+        $this->logger->info('Tra  ta at');
+        $event = new CustomEvent();
+        $this->dispatcher->addListener(CustomEvent::class, function(CustomEvent $event) {
+            dd('event tratata');
+        });
+        $this->dispatcher->dispatch($event);
         $response = new ResponseDto(true, 'Получение поста', $post, null);
         return $this->json($response->getResponse(), 200);
     }
@@ -81,5 +96,10 @@ class PostController extends AbstractController
         $entityManager->flush();
         $response = new ResponseDto(true, 'Пост удален', null, null);
         return $this->json($response->getResponse(), Response::HTTP_NO_CONTENT);
+        // curl -X 'POST' -k http://host.docker.internal:8090/v1/example/echo -d '{"name": "123"}'
+        // curl -X 'POST' -k http://gateway.docker.internal:8090/v1/example/echo -d '{"name": "123"}'
+
+        // curl -X 'POST' -k http://0.0.0.0:8090/v1/example/echo -d '{"name": "123"}'
+        // curl -X 'POST' -k http://172.23.53.69:8090/v1/example/echo -d '{"name": "123"}'
     }
 }

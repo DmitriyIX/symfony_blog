@@ -16,6 +16,8 @@ services:
       - ./.docker/nginx/conf.d:/etc/nginx/conf.d
     networks:
       - main
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   php:
     container_name: php
     build:

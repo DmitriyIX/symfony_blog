@@ -6,13 +6,20 @@ use App\Entity\Post;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use App\DTO\PostDto;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Filesystem\Filesystem;
 
 /**
  * @extends ServiceEntityRepository<Post>
  */
 class PostRepository extends ServiceEntityRepository
 {
-    public function __construct(ManagerRegistry $registry)
+    public function __construct(
+        ManagerRegistry $registry, 
+        private Filesystem $filesystem, 
+        #[Autowire(env: 'DEFAULT_URI')] private string $defaultUri,
+        #[Autowire(param: 'kernel.project_dir')] private string $projectDir
+    )
     {
         parent::__construct($registry, Post::class);
     }
@@ -52,19 +59,37 @@ class PostRepository extends ServiceEntityRepository
 
     }
 
-    public function updatePost(int $postId, PostDto $postDto): bool
+    public function updatePost(Post $post, PostDto $postDto): bool
     {
         $query = $this->createQueryBuilder('p')
             ->update()
             ->where('p.id = :postId')
-            ->setParameter('postId', $postId);
+            ->setParameter('postId', $post->getId());
         if ($postDto->title !== null) {
             $query->set('p.title', ':title')->setParameter('title', $postDto->title);
         }
         if ($postDto->content !== null) {
             $query->set('p.content', ':content')->setParameter('content', $postDto->content);
         }
+        if ($postDto->preview !== null) {
+            $this->updatePreview($post, $postDto);
+            $query->set('p.preview', ':preview')->setParameter('preview', $postDto->preview->getClientOriginalName());
+            
+        }
         $query->set('p.updated_at', ':updatedAt')->setParameter('updatedAt', new \DateTimeImmutable());
         return $query->getQuery()->execute() > 0;
+    }
+
+    private function updatePreview(Post $post, PostDto $postDto): void
+    {
+        $this->filesystem->remove($this->projectDir . '/public/images/posts/' . $post->getId() . '/preview');
+
+        $postsFilepath = $this->projectDir . '/public/images/posts';
+        $postFilepath = $postsFilepath . '/' . $post->getId() . '/preview';
+        if ($this->filesystem->exists($postFilepath) == false) {
+            $this->filesystem->mkdir($postFilepath, 0755);
+        }
+        $postDto->preview->move($postFilepath, $postDto->preview->getClientOriginalName());
+        $post->setPreview($postDto->preview->getClientOriginalName());
     }
 }

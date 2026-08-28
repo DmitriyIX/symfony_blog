@@ -2,7 +2,6 @@
 namespace App\Controller;
 
 use App\Entity\Post;
-use App\Event\CustomEvent;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -11,30 +10,35 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
-use Symfony\Component\HttpKernel\Attribute\MapQueryString;
 use App\DTO\PostDto;
 use App\DTO\ResponseDto;
-use Symfony\Contracts\EventDispatcher\Event;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Filesystem\Filesystem;
 
 class PostController extends AbstractController
 {
     public function __construct(
         private EventDispatcherInterface $dispatcher,
-        private LoggerInterface $logger
+        private LoggerInterface $logger,
+        private Filesystem $filesystem,
     ){}
 
-    #[Route('/posts/{id}', methods: 'PATCH')]
+    #[Route('/posts/{id}', methods: 'POST')]
     public function update(
-        #[MapRequestPayload()] PostDto $postDto,
+        #[MapRequestPayload()] ?PostDto $postDto,
         Post $post,
-        int $id,
-        EntityManagerInterface $entityManager
+        EntityManagerInterface $entityManager,
+        Request $request
     ): Response
     {
-        $result = $entityManager->getRepository(Post::class)->updatePost($id, $postDto);
+        if ($postDto == null) {
+            $previewFile = $request->files->get('preview');
+            $postDto = new PostDto(null, null, $previewFile);
+        }
+        $result = $entityManager->getRepository(Post::class)->updatePost($post, $postDto);
         if ($result) {
-            $response = new ResponseDto(true, 'Обновление поста', $postDto, null);
+            $entityManager->refresh($post);
+            $response = new ResponseDto(true, 'Обновление поста', $post, null);
             return $this->json($response->getResponse(), 200);
         }
         return $this->json($post);
@@ -55,12 +59,6 @@ class PostController extends AbstractController
         Post $post
     ): JsonResponse
     {
-        $this->logger->info('Tra  ta at');
-        $event = new CustomEvent();
-        $this->dispatcher->addListener(CustomEvent::class, function(CustomEvent $event) {
-            dd('event tratata');
-        });
-        $this->dispatcher->dispatch($event);
         $response = new ResponseDto(true, 'Получение поста', $post, null);
         return $this->json($response->getResponse(), 200);
     }
@@ -74,20 +72,31 @@ class PostController extends AbstractController
         $post = new Post();
         $post->setTitle($postDto->title);
         $post->setContent($postDto->content);
-        $post->setPreview($postDto->preview);
         $post->setStatus($postDto->status);
         $post->setCreatedAt(new \DateTimeImmutable());
         $post->setUpdatedAt(new \DateTimeImmutable());
-
+        
         $entityManager->persist($post);
         $entityManager->flush();
+        
+        if ($postDto->preview !== null) {
+            $postsFilepath = $this->getParameter('kernel.project_dir') . '/public/images/posts';
+            $postFilepath = $postsFilepath . '/' . $post->getId() . '/preview';
+            if ($this->filesystem->exists($postFilepath) == false) {
+                $this->filesystem->mkdir($postFilepath, 0755);
+            }
+            $postDto->preview->move($postFilepath, $postDto->preview->getClientOriginalName());
+            $post->setPreview($postDto->preview->getClientOriginalName());
+            $entityManager->persist($post);
+            $entityManager->flush();
+        }
 
         $response = new ResponseDto(true, 'Пост создан', ['id' => $post->getId()], null);
         return $this->json($response->getResponse(), 201);
     }
 
     #[Route('/posts/{id}', methods: 'DELETE')]
-    public function remove(
+    public function delete(
         Post $post,
         EntityManagerInterface $entityManager
     ): JsonResponse
@@ -96,10 +105,5 @@ class PostController extends AbstractController
         $entityManager->flush();
         $response = new ResponseDto(true, 'Пост удален', null, null);
         return $this->json($response->getResponse(), Response::HTTP_NO_CONTENT);
-        // curl -X 'POST' -k http://host.docker.internal:8090/v1/example/echo -d '{"name": "123"}'
-        // curl -X 'POST' -k http://gateway.docker.internal:8090/v1/example/echo -d '{"name": "123"}'
-
-        // curl -X 'POST' -k http://0.0.0.0:8090/v1/example/echo -d '{"name": "123"}'
-        // curl -X 'POST' -k http://172.23.53.69:8090/v1/example/echo -d '{"name": "123"}'
     }
 }

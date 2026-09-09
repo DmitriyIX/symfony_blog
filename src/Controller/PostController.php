@@ -14,6 +14,10 @@ use App\DTO\PostDto;
 use App\DTO\ResponseDto;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Serializer\Normalizer\AbstractNormalizer;
+use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
+use Symfony\Component\Serializer\Normalizer\DenormalizerInterface;
 
 class PostController extends AbstractController
 {
@@ -21,6 +25,9 @@ class PostController extends AbstractController
         private EventDispatcherInterface $dispatcher,
         private LoggerInterface $logger,
         private Filesystem $filesystem,
+        private SerializerInterface $serializer,
+        private NormalizerInterface $normalizer,
+        private DenormalizerInterface $denormalizer
     ){}
 
     #[Route('/posts/{id}', methods: 'POST')]
@@ -36,6 +43,7 @@ class PostController extends AbstractController
             $postDto = new PostDto(null, null, $previewFile);
         }
         $result = $entityManager->getRepository(Post::class)->updatePost($post, $postDto);
+        $entityManager->flush();
         if ($result) {
             $entityManager->refresh($post);
             $response = new ResponseDto(true, 'Обновление поста', $post, null);
@@ -59,7 +67,10 @@ class PostController extends AbstractController
         Post $post
     ): JsonResponse
     {
-        $response = new ResponseDto(true, 'Получение поста', $post, null);
+        
+        $data = $this->normalizer->normalize($post, null);
+        $postDto = $this->denormalizer->denormalize($data, PostDto::class, null, [AbstractNormalizer::ALLOW_EXTRA_ATTRIBUTES => true]);
+        $response = new ResponseDto(true, 'Получение поста', $postDto, null);
         return $this->json($response->getResponse(), 200);
     }
 

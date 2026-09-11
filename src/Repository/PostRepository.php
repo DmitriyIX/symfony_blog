@@ -3,6 +3,7 @@
 namespace App\Repository;
 
 use App\Entity\Post;
+use App\Service\File;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use App\DTO\PostDto;
@@ -18,7 +19,8 @@ class PostRepository extends ServiceEntityRepository
         ManagerRegistry $registry, 
         private Filesystem $filesystem, 
         #[Autowire(env: 'DEFAULT_URI')] private string $defaultUri,
-        #[Autowire(param: 'kernel.project_dir')] private string $projectDir
+        #[Autowire(param: 'kernel.project_dir')] private string $projectDir,
+        private File $fileService
     )
     {
         parent::__construct($registry, Post::class);
@@ -73,8 +75,6 @@ class PostRepository extends ServiceEntityRepository
         }
         if ($postDto->preview !== null) {
             $this->updatePreview($post, $postDto);
-            $query->set('p.preview', ':preview')->setParameter('preview', $postDto->preview->getClientOriginalName());
-            
         }
         $query->set('p.updated_at', ':updatedAt')->setParameter('updatedAt', new \DateTimeImmutable());
         return $query->getQuery()->execute() > 0;
@@ -82,14 +82,9 @@ class PostRepository extends ServiceEntityRepository
 
     private function updatePreview(Post $post, PostDto $postDto): void
     {
+        $isPreviewS3 = preg_match('/https:\/\/storage.yandexcloud.net\/test-d45\/([0-9a-z]*\.[jpg|png]*)/', $post->getPreview(), $matches);
+        $oldPreview = $isPreviewS3 ? $matches[1] : "";
         $this->filesystem->remove($this->projectDir . '/public/images/posts/' . $post->getId() . '/preview');
-
-        $postsFilepath = $this->projectDir . '/public/images/posts';
-        $postFilepath = $postsFilepath . '/' . $post->getId() . '/preview';
-        if ($this->filesystem->exists($postFilepath) == false) {
-            $this->filesystem->mkdir($postFilepath, 0755);
-        }
-        $postDto->preview->move($postFilepath, $postDto->preview->getClientOriginalName());
-        $post->setPreview($postDto->preview->getClientOriginalName());
+        $this->fileService->uploadPostPreview($post, $postDto->preview, $oldPreview);        
     }
 }

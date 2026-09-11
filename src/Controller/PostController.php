@@ -18,6 +18,7 @@ use Symfony\Component\Serializer\Normalizer\AbstractNormalizer;
 use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
 use Symfony\Component\Serializer\Normalizer\DenormalizerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 class PostController extends AbstractController
 {
@@ -27,7 +28,8 @@ class PostController extends AbstractController
         private Filesystem $filesystem,
         private SerializerInterface $serializer,
         private NormalizerInterface $normalizer,
-        private DenormalizerInterface $denormalizer
+        private DenormalizerInterface $denormalizer,
+        #[Autowire(env: 'DEFAULT_URI')] private string $defaultUri
     ){}
 
     #[Route('/posts/{id}', methods: 'POST')]
@@ -43,7 +45,6 @@ class PostController extends AbstractController
             $postDto = new PostDto(null, null, $previewFile);
         }
         $result = $entityManager->getRepository(Post::class)->updatePost($post, $postDto);
-        $entityManager->flush();
         if ($result) {
             $entityManager->refresh($post);
             $response = new ResponseDto(true, 'Обновление поста', $post, null);
@@ -67,10 +68,7 @@ class PostController extends AbstractController
         Post $post
     ): JsonResponse
     {
-        
-        $data = $this->normalizer->normalize($post, null);
-        $postDto = $this->denormalizer->denormalize($data, PostDto::class, null, [AbstractNormalizer::ALLOW_EXTRA_ATTRIBUTES => true]);
-        $response = new ResponseDto(true, 'Получение поста', $postDto, null);
+        $response = new ResponseDto(true, 'Получение поста', $post, null);
         return $this->json($response->getResponse(), 200);
     }
 
@@ -86,21 +84,12 @@ class PostController extends AbstractController
         $post->setStatus($postDto->status);
         $post->setCreatedAt(new \DateTimeImmutable());
         $post->setUpdatedAt(new \DateTimeImmutable());
+        if ($postDto->preview == null) {
+            $post->setPreview($this->defaultUri . '/images/posts/default-preview.png');
+        }
         
         $entityManager->persist($post);
         $entityManager->flush();
-        
-        if ($postDto->preview !== null) {
-            $postsFilepath = $this->getParameter('kernel.project_dir') . '/public/images/posts';
-            $postFilepath = $postsFilepath . '/' . $post->getId() . '/preview';
-            if ($this->filesystem->exists($postFilepath) == false) {
-                $this->filesystem->mkdir($postFilepath, 0755);
-            }
-            $postDto->preview->move($postFilepath, $postDto->preview->getClientOriginalName());
-            $post->setPreview($postDto->preview->getClientOriginalName());
-            $entityManager->persist($post);
-            $entityManager->flush();
-        }
 
         $response = new ResponseDto(true, 'Пост создан', ['id' => $post->getId()], null);
         return $this->json($response->getResponse(), 201);
